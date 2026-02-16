@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymarket Analyzer — Quantitative Edge Finder</title>
+    <meta name="description"
+        content="Paste a Polymarket event URL and get institutional-grade analysis with ranked actionable bets.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0a0a0a;
+            --surface-elev: #121212;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.15);
+            --accent: #00ff41;
+            --accent-glow: rgba(0, 255, 65, 0.15);
+            --green: #00ff41;
+            --red: #ff3e5e;
+            --text-main: #ffffff;
+            --text-dim: #888888;
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-sans: 'Outfit', sans-serif;
+            --radius: 10px;
+            --shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+            background-image:
+                radial-gradient(circle at 50% 50%, rgba(0, 255, 65, 0.03) 0%, transparent 80%),
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%),
+                linear-gradient(90deg, rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 255, 0, 0.02));
+            background-size: 100% 100%, 100% 4px, 3px 100%;
+            cursor: none !important;
+        }
+
+        /* ── MATRIX HUD CURSOR ── */
+        .custom-cursor {
+            width: 14px;
+            height: 14px;
+            background: var(--accent);
+            position: fixed;
+            pointer-events: none;
+            z-index: 20000;
+            border-radius: 50%;
+            mix-blend-mode: screen;
+            filter: blur(1px);
+            box-shadow: 0 0 10px var(--accent), 0 0 20px var(--accent-glow);
+            transition: transform 0.1s ease-out;
+            opacity: 0.8;
+            transform: translate(-50%, -50%);
+        }
+
+        .custom-cursor.clicking {
+            transform: translate(-50%, -50%) scale(2);
+            opacity: 1;
+            background: #fff;
+        }
+
+        a,
+        button,
+        input {
+            cursor: none !important;
+        }
+
+        body::before {
+            content: " ";
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+                linear-gradient(90deg, rgba(0, 255, 65, 0.02), rgba(0, 255, 65, 0.01), rgba(0, 255, 65, 0.02));
+            z-index: 9999;
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none;
+            opacity: 0.4;
+            animation: crtFlicker 0.15s infinite;
+        }
+
+        @keyframes crtFlicker {
+            0% {
+                opacity: 0.27;
+            }
+
+            5% {
+                opacity: 0.28;
+            }
+
+            10% {
+                opacity: 0.27;
+            }
+
+            15% {
+                opacity: 0.29;
+            }
+
+            20% {
+                opacity: 0.28;
+            }
+
+            25% {
+                opacity: 0.27;
+            }
+
+            30% {
+                opacity: 0.30;
+            }
+
+            100% {
+                opacity: 0.27;
+            }
+        }
+
+        /* ── SAAS CONTAINER ── */
+        .terminal-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 2rem;
+            animation: initialFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes initialFade {
+            0% {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ── MATRIX GRAIN ── */
+        .matrix-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('https://www.transparenttextures.com/patterns/carbon-fibre.png');
+            opacity: 0.05;
+            pointer-events: none;
+            z-index: 10000;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 3rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-weight: 900;
+            font-size: 0.8rem;
+            letter-spacing: -0.01em;
+            text-transform: uppercase;
+        }
+
+        .brand-icon {
+            width: 18px;
+            height: 18px;
+            background: var(--accent);
+            border-radius: 3px;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            background: var(--surface);
+            padding: 0.4rem 1rem;
+            border-radius: 100px;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+        }
+
+        .pulse-dot {
+            width: 5px;
+            height: 5px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulseFade 2s infinite;
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        @keyframes pulseFade {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        /* ── COMMAND PANEL ── */
+        .command-panel {
+            max-width: 800px;
+            margin: 0 auto 3rem auto;
+            text-align: center;
+        }
+
+        .command-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            letter-spacing: -0.02em;
+            margin-bottom: 0.75rem;
+            color: var(--accent);
+            text-shadow: 0 0 15px var(--accent-glow);
+            text-transform: uppercase;
+        }
+
+        .command-title::before {
+            content: "> ";
+            opacity: 0.5;
+        }
+
+        .command-title::after {
+            content: "_";
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .command-subtitle {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 2.5rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            letter-spacing: 0.05em;
+            opacity: 0.8;
+        }
+
+        .input-wrapper {
+            background: rgba(10, 10, 10, 0.9);
+            border: 1px solid var(--border);
+            padding: 0.35rem;
+            border-radius: 2px;
+            display: flex;
+            gap: 0.25rem;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .input-wrapper:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .main-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 0.75rem 1.25rem;
+            color: var(--accent);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            outline: none;
+            text-shadow: 0 0 5px var(--accent-glow);
+        }
+
+        .main-input::placeholder {
+            color: rgba(0, 255, 65, 0.3);
+            text-transform: uppercase;
+        }
+
+        .btn-analyze {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 0 1.5rem;
+            border-radius: 2px;
+            font-weight: 800;
+            font-size: 0.85rem;
+            cursor: none !important;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .btn-analyze:hover {
+            background: var(--accent);
+            color: #000;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .btn-analyze:active {
+            transform: translate(1px, 1px) skew(-2deg);
+            filter: brightness(1.2);
+        }
+
+        .btn-analyze.analyzing {
+            background: #000 !important;
+            color: var(--accent);
+            pointer-events: none;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .btn-analyze.analyzing::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 300%;
+            height: 300%;
+            background-image:
+                linear-gradient(rgba(0, 255, 65, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 65, 0.3) 1px, transparent 1px);
+            background-size: 6px 6px;
+            animation: matrixGridScroll 0.4s linear infinite;
+            opacity: 0.8;
+            pointer-events: none;
+        }
+
+        @keyframes matrixGridScroll {
+            from {
+                transform: translate(0, 0);
+            }
+
+            to {
+                transform: translate(-12px, -12px);
+            }
+        }
+
+        /* ── STATS ── */
+        .context-group {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: rgba(10, 10, 10, 0.85);
+            border: 1px solid var(--border);
+            padding: 1rem;
+            border-radius: 2px;
+            transition: all 0.3s;
+            backdrop-filter: blur(8px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            border-color: var(--accent);
+            box-shadow: inset 0 0 15px var(--accent-glow);
+        }
+
+        .stat-card::before {
+            content: "";
+            position: absolute;
+            top: -100%;
+            left: 0;
+            width: 100%;
+            height: 50%;
+            background: linear-gradient(to bottom, transparent, var(--accent-glow), transparent);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .stat-card:hover::before {
+            animation: scannerLine 1.5s linear infinite;
+            opacity: 1;
+        }
+
+        .stat-card::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.3;
+        }
+
+        .stat-label {
+            font-size: 0.55rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 1.15rem;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 8px var(--accent-glow);
+            letter-spacing: -0.02em;
+        }
+
+        .stat-value.up {
+            color: var(--green);
+        }
+
+        .stat-value.down {
+            color: var(--red);
+        }
+
+        /* ── SIGNALS ── */
+        .signals-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 0 0.5rem;
+        }
+
+        .signals-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            letter-spacing: 0.1em;
+            color: #fff;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+
+        .signals-meta {
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .signal-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .signal-card {
+            background: rgba(10, 10, 10, 0.9);
+            border: 1px solid var(--border);
+            padding: 1rem 1.5rem;
+            border-radius: 2px;
+            display: grid;
+            grid-template-columns: 2fr 0.8fr 1fr 1fr 1.5fr;
+            align-items: center;
+            gap: 1.5rem;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(5px);
+        }
+
+        .signal-card:hover {
+            border-color: var(--accent);
+            box-shadow: inset 0 0 20px var(--accent-glow);
+        }
+
+        .signal-card::before {
+            content: "";
+            position: absolute;
+            top: -100%;
+            left: 0;
+            width: 100%;
+            height: 50%;
+            background: linear-gradient(to bottom, transparent, var(--accent-glow), transparent);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .signal-card:hover::before {
+            animation: scannerLine 1.5s linear infinite;
+            opacity: 1;
+        }
+
+        @keyframes scannerLine {
+            0% {
+                top: -50%;
+            }
+
+            100% {
+                top: 100%;
+            }
+        }
+
+        .signal-card.safe {
+            border-left: 3px solid var(--green);
+        }
+
+        .signal-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .signal-name {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .tag-safe {
+            background: rgba(0, 255, 163, 0.08);
+            color: var(--green);
+            font-size: 0.5rem;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            border: 1px solid rgba(0, 255, 163, 0.15);
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .signal-desc {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .signal-side {
+            font-family: var(--font-mono);
+            font-weight: 900;
+            font-size: 1.1rem;
+            text-align: center;
+        }
+
+        .side-no {
+            color: var(--accent);
+            text-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .side-yes {
+            color: var(--red);
+            text-shadow: 0 0 12px rgba(255, 62, 94, 0.4);
+        }
+
+        .data-label {
+            font-size: 0.5rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.15rem;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .data-value {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .data-value.accent {
+            color: var(--accent);
+        }
+
+        .data-value.up {
+            color: var(--green);
+        }
+
+        .data-value.down {
+            color: var(--red);
+        }
+
+        .stability-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            width: 100%;
+        }
+
+        .stability-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+            width: 100%;
+            position: relative;
+        }
+
+        .stability-fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 1.2s;
+        }
+
+        .card-footer {
+            grid-column: 1 / -1;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.03);
+            display: flex;
+            justify-content: flex-start;
+            gap: 2rem;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .footer-item b {
+            color: #fff;
+            margin-left: 0.25rem;
+            font-weight: 800;
+        }
+
+        .status-toast {
+            position: fixed;
+            bottom: 2.5rem;
+            right: 2.5rem;
+            background: rgba(0, 0, 0, 0.9);
+            color: var(--accent);
+            padding: 1rem 2rem;
+            border-radius: 2px;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            font-weight: 700;
+            border: 1px solid var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+            display: none;
+            z-index: 10000;
+            animation: slideIn 0.3s forwards;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-toast::before {
+            content: "> ";
+            opacity: 0.5;
+        }
+
+        @keyframes slideIn {
+            0% {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            100% {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* ── BRANDING POLISH ── */
+        .branding-badge {
+            margin: 8rem auto 2rem auto;
+            display: inline-block;
+            padding: 0.5rem 1.5rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.55rem;
+            color: var(--text-dim);
+            letter-spacing: 0.4em;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(4px);
+            transition: all 0.3s;
+        }
+
+        .branding-badge:hover {
+            border-color: #fff;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .institutional-footer {
+            margin-top: 4rem;
+            padding: 2rem;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border-top: 1px solid var(--border);
+            opacity: 0.6;
+        }
+
+        @media (max-width: 1000px) {
+            .signal-card {
+                grid-template-columns: 1fr 1fr;
+                gap: 2rem;
+            }
+
+            .card-footer {
+                flex-direction: column;
+                gap: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="custom-cursor" id="cursor"></div>
+    <div class="matrix-overlay"></div>
+    <div class="terminal-container">
+        <nav class="header">
+            <div class="status-pill">
+                <div class="pulse-dot"></div>
+                SYSTEM_LIVE // <span id="systemTime">00:00:00</span> // <span id="latencyDisplay">8MS</span>
+            </div>
+        </nav>
+
+        <section class="command-panel">
+            <h1 class="command-title">Institutional Alpha</h1>
+            <p class="command-subtitle">Institutional Analytics Engine designed for high-conviction tail selling and
+                volatility discovery.</p>
+            <div class="input-wrapper">
+                <input type="text" id="urlInput" class="main-input" placeholder="Enter Market URL for Deep Scan..."
+                    autocomplete="off">
+                <button id="analyzeBtn" onclick="analyze()" class="btn-analyze">Analyze</button>
+            </div>
+        </section>
+
+        <section class="context-group" id="context"></section>
+
+        <section id="results" style="display:none; opacity:0; transition:opacity 0.6s ease;">
+            <div class="signals-header">
+                <div class="signals-title" id="resultsTitle">Statistical Signals</div>
+                <div class="signals-meta" id="resultsSub">REGIME: STABLE_VOL</div>
+            </div>
+            <div class="signal-grid" id="betCards"></div>
+        </section>
+
+        <div style="text-align: center;">
+            <div class="branding-badge">
+                RUPPI_QUANTUM_SAAS_(C)_2026 // SECURE_CLEARANCE_REQUIRED
+            </div>
+        </div>
+
+        <footer class="institutional-footer">
+            &copy; 2026 RUPPI QUANTUM TECHNOLOGIES // WALL_STREET_INSTITUTIONAL_CLEARANCE
+        </footer>
+    </div>
+
+    <div class="status-toast" id="statusToast">INITIALIZING_SCAN...</div>
+
+    <script>
+        // ══════════════════════════════════════════════════════════════════
+        // POLYMARKET ANALYZER — CLIENT-SIDE ENGINE
+        // ══════════════════════════════════════════════════════════════════
+
+        // ── INSTITUTIONAL TERMINAL CLOCK ──
+        function updateTerminalTime() {
+            const now = new Date();
+            const timeStr = now.toISOString().split('T')[1].split('.')[0] + ' UTC';
+            document.getElementById('systemTime').textContent = timeStr;
+        }
+        setInterval(updateTerminalTime, 1000);
+        updateTerminalTime();
+
+        // ── SMART CONFIG (works local + Vercel) ──
+        const isLocal = window.location.hostname === 'localhost' || 
+                       window.location.hostname === '127.0.0.1' || 
+                       window.location.protocol === 'file:';
+        
+        const isDevServer = isLocal && window.location.port === '3000';
+        
+        // Use proxies if running on dev server (port 3000), direct URLs otherwise in local
+        const GAMMA_BASE = isDevServer ? "/api/gamma" : 
+                          isLocal ? "https://gamma-api.polymarket.com" : 
+                          "/api/gamma";
+        
+        const BINANCE_V3 = isDevServer ? "/api/binance/api/v3" : 
+                          isLocal ? "https://api.binance.com/api/v3" : 
+                          "/api/binance/api/v3";
+
+        // ── HELPERS ──
+        function wilsonCI(s, n, z = 1.96) {
+            if (n === 0) return { p: 0, lo: 0, hi: 0 };
+            const p = s / n, d = 1 + z * z / n;
+            const c = (p + z * z / (2 * n)) / d;
+            const m = (z / d) * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
+            return { p, lo: Math.max(0, c - m), hi: Math.min(1, c + m) };
+        }
+
+        function calcRSI(closes, period = 14) {
+            if (closes.length < period + 1) return 50;
+            let gains = 0, losses = 0;
+            for (let i = closes.length - period; i < closes.length; i++) {
+                const d = closes[i] - closes[i - 1];
+                if (d > 0) gains += d; else losses -= d;
+            }
+            gains /= period; losses /= period;
+            if (losses === 0) return 100;
+            const rs = gains / losses;
+            return 100 - 100 / (1 + rs);
+        }
+
+        function stdev(arr) {
+            const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+            return Math.sqrt(arr.reduce((a, b) => a + (b - m) ** 2, 0) / (arr.length - 1));
+        }
+
+        async function apiFetch(url) {
+            try {
+                const res = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return await res.json();
+            } catch (e) {
+                // If in local and direct fetch fails (CORS), try with CORS proxy
+                if (isLocal && url.startsWith('https://')) {
+                    console.warn(`[CORS FALLBACK] Trying proxy for: ${url}`);
+                    try {
+                        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                        const proxyRes = await fetch(proxyUrl);
+                        if (proxyRes.ok) return await proxyRes.json();
+                    } catch (proxyErr) {
+                        console.error('[PROXY_FAILED]', proxyErr);
+                    }
+                }
+                console.error(`[API_ERROR] ${url}:`, e);
+                throw new Error(`API_FAILED: ${e.message}`);
+            }
+        }
+
+        // ── UI HELPERS ──
+        function showToast(msg) {
+            const t = document.getElementById("statusToast");
+            t.textContent = msg.toUpperCase();
+            t.style.display = "block";
+            setTimeout(() => { t.style.display = "none"; }, 3000);
+        }
+
+        function detectAsset(question, url) {
+            const text = (question + " " + url).toUpperCase();
+            if (text.includes("ETHER") || text.includes("ETH")) return { name: "ETH", symbol: "ETHUSDT" };
+            if (text.includes("SOLANA") || text.includes("SOL ")) return { name: "SOL", symbol: "SOLUSDT" };
+            if (text.includes("CARDANO") || text.includes("ADA ")) return { name: "ADA", symbol: "ADAUSDT" };
+            if (text.includes("POLYGON") || text.includes("MATIC") || text.includes("POL ")) return { name: "POL", symbol: "POLUSDT" };
+            if (text.includes("DOGE")) return { name: "DOGE", symbol: "DOGEUSDT" };
+            return { name: "BTC", symbol: "BTCUSDT" }; // Default
+        }
+
+        // ── MAIN ANALYZE FUNCTION ──
+        async function analyze() {
+            const url = document.getElementById("urlInput").value.trim();
+            if (!url) return;
+
+            const btn = document.querySelector('.btn-analyze');
+            btn.classList.add('analyzing');
+
+            window.location.hash = encodeURIComponent(url);
+            showToast("Parsing Market Graph...");
+
+            try {
+                // ── 1. MARKET ADAPTATION ──
+                const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+                const pathParts = cleanUrl.split("/");
+                const slug = pathParts.pop().split("?")[0];
+                const isEventUrl = url.includes("/event/");
+
+                showToast("Fetching Market Graph...");
+                let eventObj = null;
+                let asset = { name: "BTC", symbol: "BTCUSDT" };
+                let btcTicker = null;
+
+                if (isEventUrl) {
+                    const eventSearch = await apiFetch(`${GAMMA_BASE}/events?slug=${slug}`);
+                    if (eventSearch && eventSearch.length > 0) {
+                        eventObj = eventSearch[0];
+                    }
+                }
+
+                if (!eventObj) {
+                    const mktData = await apiFetch(`${GAMMA_BASE}/markets?active=true&slug=${slug}`);
+                    if (mktData && mktData.length > 0) {
+                        eventObj = { title: mktData[0].question, markets: [mktData[0]] };
+                    }
+                }
+
+                if (!eventObj || !eventObj.markets) {
+                    throw new Error("MARKET_NOT_FOUND_OR_INACTIVE");
+                }
+
+                asset = detectAsset(eventObj.title || "", url);
+
+                const assetTicker = await apiFetch(`${BINANCE_V3}/ticker/24hr?symbol=${asset.symbol}`);
+                const event = eventObj; // Analysis target
+
+                showToast("Retrieving Proprietary Alpha Matrices...");
+                const [dailyKlines, klines4h] = await Promise.all([
+                    apiFetch(`${BINANCE_V3}/klines?symbol=${asset.symbol}&interval=1d&limit=730`),
+                    apiFetch(`${BINANCE_V3}/klines?symbol=${asset.symbol}&interval=4h&limit=1000`)
+                ]);
+
+                const dailyCloses = dailyKlines.map(k => parseFloat(k[4]));
+                const spot = dailyCloses[dailyCloses.length - 1];
+                const rsi = calcRSI(dailyCloses);
+
+                // Realized vol (14d)
+                const logRets = [];
+                for (let i = dailyCloses.length - 15; i < dailyCloses.length - 1; i++) {
+                    logRets.push(Math.log(dailyCloses[i + 1] / dailyCloses[i]));
+                }
+                const vol14d = stdev(logRets) * Math.sqrt(365);
+
+                const feb1Price = dailyCloses[dailyCloses.length - 15] || dailyCloses[0];
+                const monthMove = ((spot - feb1Price) / feb1Price) * 100;
+
+                // ── 2. PARSE MARKETS ──
+                showToast("Deep-parsing market structure...");
+                const analysisTargets = [];
+                for (const m of event.markets) {
+                    if (m.closed || !m.active) continue;
+                    const q = m.question || "";
+                    const prices = JSON.parse(m.outcomePrices || '["0.5","0.5"]');
+                    const yesPrice = parseFloat(prices[0]);
+                    const mEndDate = m.endDate || event.endDate || new Date().toISOString();
+
+                    // Greedy Strike Extractor (Human-Proof)
+                    const cleanQ = q.replace(/,/g, "").replace(/\%/g, " ");
+                    const numMatches = cleanQ.match(/[0-9.]+[km]?/gi);
+                    if (!numMatches) continue;
+
+                    let targetStrike = null;
+                    // Filter out years and contextual small numbers
+                    const possibleStrikes = numMatches.map(n => {
+                        let s = n.toLowerCase();
+                        let m = 1;
+                        if (s.endsWith('k')) { m = 1000; s = s.slice(0, -1); }
+                        else if (s.endsWith('m')) { m = 1000000; s = s.slice(0, -1); }
+                        return parseFloat(s) * m;
+                    }).filter(v => v > 500 && v !== 2025 && v !== 2026 && v !== 2024);
+
+                    if (possibleStrikes.length > 0) {
+                        // Priority: Take the LAST number mentioned (usually the target strike)
+                        targetStrike = possibleStrikes[possibleStrikes.length - 1];
+                    }
+
+                    if (!targetStrike) continue;
+
+                    const direction = targetStrike > spot ? "UPSIDE" : "DOWNSIDE";
+                    analysisTargets.push({ strike: targetStrike, yesPrice, direction, question: q, endDate: mEndDate });
+                }
+
+                if (analysisTargets.length === 0) throw new Error("NO_ACTIVE_QUANT_SUBJECTS_IN_EVENT");
+                const primaryTarget = analysisTargets[0];
+                const daysLeft = Math.max(1, Math.ceil((new Date(primaryTarget.endDate).getTime() - Date.now()) / 86400000));
+
+                // ── 3. ROLLING WINDOWS ──
+                showToast("Resolving Multivariate Vol Tensors...");
+                const candles = klines4h.map(k => ({ o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
+                const W = daysLeft * 6; // candles per window
+
+                const volLo = vol14d * 0.5, volHi = vol14d * 1.5;
+                const upsAll = [], dnsAll = [], upsReg = [], dnsReg = [];
+
+                for (let i = 0; i < candles.length - W; i++) {
+                    const win = candles.slice(i, i + W);
+                    const s = win[0].o;
+                    const hi = Math.max(...win.map(c => c.h));
+                    const lo = Math.min(...win.map(c => c.l));
+                    const u = ((hi - s) / s) * 100;
+                    const d = ((s - lo) / s) * 100;
+                    upsAll.push(u); dnsAll.push(d);
+
+                    // Window vol
+                    const wCloses = win.map(c => c.c);
+                    const wRets = [];
+                    for (let j = 0; j < wCloses.length - 1; j++) wRets.push(Math.log(wCloses[j + 1] / wCloses[j]));
+                    if (wRets.length > 1) {
+                        const wv = stdev(wRets) * Math.sqrt(365 * 6);
+                        if (wv >= volLo && wv <= volHi) { upsReg.push(u); dnsReg.push(d); }
+                    }
+                }
+
+                const useRegime = upsReg.length >= 50;
+                const upsUse = useRegime ? upsReg : upsAll;
+                const dnsUse = useRegime ? dnsReg : dnsAll;
+                const nUse = upsUse.length;
+
+                // ── 4. ANALYZE TARGETS ──
+                showToast("Simulating Neural Conviction Paths...");
+                const actionable = [];
+
+                for (const target of analysisTargets) {
+                    const { strike, yesPrice: mktYes, direction } = target;
+                    const type = direction === "UPSIDE" ? "CEILING" : "FLOOR";
+                    const moveData = direction === "UPSIDE" ? upsUse : dnsUse;
+
+                    const mv = Math.abs(strike - spot) / spot * 100;
+                    const hits = moveData.filter(m => m >= mv).length;
+
+                    const moveDataLen = moveData.length || 1;
+                    const { p: pHat, lo: ciLo, hi: ciHi } = wilsonCI(hits, moveDataLen);
+
+                    const totalDistLen = (direction === "UPSIDE" ? upsAll.length : dnsAll.length) || 1;
+                    const hitsAll = direction === "UPSIDE"
+                        ? (mv > 0 ? upsAll.filter(u => u >= mv).length : upsAll.length)
+                        : (mv > 0 ? dnsAll.filter(d => d >= mv).length : dnsAll.length);
+                    const pBase = hitsAll / totalDistLen;
+
+                    // ── QUANT BETA ANALYSIS ──
+                    const daysRemaining = Math.max(1, daysLeft);
+                    const expectedMovePct = vol14d * Math.sqrt(daysRemaining / 365);
+                    const sigma = (mv / 100) / (expectedMovePct || 0.01);
+
+                    // 1. Initial Blend: Neutralize "Crash Bias"
+                    const rsiBias = (rsi < 45 || rsi > 55) ? 0.90 : 0.45;
+                    let pFinal = (pHat * (1 - rsiBias) + pBase * rsiBias);
+
+                    // 2. MACRO PROBABILITY OVERLAY: Contrarian Alpha & Tail Stabilizer
+                    // If target is very far (>1.25 SIGMA) and market is crashing/oversold
+                    // the model should recognize 'Structural Safety' (Contrarian Pillar)
+                    const isOversold = rsi < 42;
+                    const isExtremeTail = sigma > 1.25;
+
+                    if (isOversold) {
+                        if (direction === "DOWNSIDE") {
+                            // If extreme tail during crash, p(Crash Further) is lower than immediate momentum suggests
+                            const tailShield = isExtremeTail ? 0.08 : 0.15;
+                            pFinal = Math.max(0, pFinal * tailShield);
+                        }
+                        if (direction === "UPSIDE") pFinal = Math.min(0.98, pFinal * 2.1); // Mean reversion bounce
+                    } else if (rsi > 58) {
+                        if (direction === "UPSIDE") {
+                            const tailShield = isExtremeTail ? 0.08 : 0.15;
+                            pFinal = Math.max(0, pFinal * tailShield);
+                        }
+                        if (direction === "DOWNSIDE") pFinal = Math.min(0.98, pFinal * 2.1);
+                    }
+
+                    // Pick best side - PREFER NO for Structural Safety (Tail Selling)
+                    const edgeNo = (1 - pFinal) - (1 - mktYes);
+                    const edgeYes = pFinal - mktYes;
+
+                    let side, edge, pWin, ciEdge;
+                    const isFloorSelling = (isOversold && direction === "DOWNSIDE");
+                    const isCeilingSelling = (rsi > 58 && direction === "UPSIDE");
+
+                    if ((isFloorSelling || isCeilingSelling) && edgeNo > 0.001) {
+                        side = "NO"; edge = edgeNo; pWin = 1 - pFinal;
+                        ciEdge = (1 - ciHi) - (1 - mktYes);
+                    } else if (edgeNo >= edgeYes && edgeNo > 0) {
+                        side = "NO"; edge = edgeNo; pWin = 1 - pFinal;
+                        ciEdge = (1 - ciHi) - (1 - mktYes);
+                    } else if (edgeYes > 0) {
+                        side = "YES"; edge = edgeYes; pWin = pFinal;
+                        ciEdge = ciLo - mktYes;
+                    } else continue;
+
+                    // ── MOMENTUM GUARDRAILS ──
+                    let momentumMult = 1.0;
+                    if (isOversold) {
+                        if (direction === "DOWNSIDE" && side === "NO") momentumMult = 2.8; // Strong conviction in floor
+                        if (direction === "UPSIDE" && side === "YES") momentumMult = 2.8;
+                    }
+
+                    // ── COST & CALCULATIONS ──
+                    const cost = side === "YES" ? mktYes : (1 - mktYes);
+                    const profit = 1 - cost;
+                    const roi = (profit / (cost || 0.01)) * 100;
+
+                    // QUALITY FILTERS
+                    if (roi < 3.8) continue;
+                    if (edge < 0.001) continue;
+                    if (ciEdge <= -0.18) continue;
+
+                    // ── QUANT CLASSIFICATION ──
+                    let tag = "SPEC";
+                    // PILLAR Sensitivity: Any OTM strike with >0.35 Sigmas in a high-tension regime is qualified
+                    const sigmaStrong = (isFloorSelling || isCeilingSelling || sigma > 0.75) && side === "NO" && sigma > 0.3;
+                    const bsSelling = pWin >= 0.82 && sigma > 0.65 && edge > 0.01;
+
+                    if (sigmaStrong || bsSelling || (pWin >= 0.78 && edge > 0.02)) {
+                        tag = "SAFE";
+                    } else {
+                        continue; // Only SAFE signals in this terminal tier
+                    }
+
+                    if (tag === "SAFE") {
+                        // ── SENSITIVITY CHECK ──
+                        const volShock = vol14d * 1.15;
+                        const sigmaShock = (mv / 100) / (volShock * Math.sqrt(daysRemaining / 365));
+                        const resistsShock = sigmaShock > 0.6;
+
+                        // ── BAYESIAN & KELLY ──
+                        let pFinalBayes = pWin;
+                        if (rsi < 35 && direction === "DOWNSIDE" && side === "NO") pFinalBayes = Math.min(0.999, pFinalBayes * 1.2);
+                        if (rsi > 65 && direction === "UPSIDE" && side === "NO") pFinalBayes = Math.min(0.999, pFinalBayes * 1.2);
+
+                        const qVal = 1 - pFinalBayes;
+                        const bVal = profit / cost;
+                        const kelly = Math.max(0, (pFinalBayes * bVal - qVal) / bVal);
+                        const suggestedSizing = (kelly * 0.25 * 100).toFixed(1);
+                        const ev1k = (pFinalBayes * profit * 1000) - (qVal * cost * 1000);
+
+                        let conf = 40;
+                        if (sigma > 1.0) conf += 20;
+                        if (resistsShock) conf += 15;
+                        if (pFinalBayes > 0.94) conf += 25;
+                        conf = Math.min(100, conf);
+
+                        const distToStrike = ((strike - spot) / spot) * 100;
+                        const desc = sigmaStrong ? "BETA_PILLAR: Strategic Resistance" : "QUANT_CONVICTION: Statistical Alpha";
+
+                        actionable.push({
+                            type, strike, mv, sigma, side, pWin: pFinalBayes, cost, roi, tag,
+                            warning: desc, mktYes, edge, conf, resistsShock,
+                            kelly: suggestedSizing, ev1k: ev1k.toFixed(0),
+                            distToStrike: distToStrike.toFixed(1)
+                        });
+
+                        // Internal Audit Log
+                        if (strike === 55000) console.log(`[QUANT_ENGINE] PILLAR_DETECTED: 55k NO | ROI: ${roi.toFixed(1)}%`);
+                    }
+                }
+
+                if (actionable.length > 0) {
+                    console.log(`[QUANT_ENGINE] DISCOVERED_${actionable.length}_SIGNALS`);
+                    actionable.sort((a, b) => b.conf - a.conf);
+                }
+
+                // ── 5. RENDER ──
+                showToast("Synthesizing Institutional Alpha...");
+                renderContext(asset.name, spot, rsi, vol14d, feb1Price, monthMove, daysLeft, nUse, useRegime, upsReg.length);
+                renderResults(actionable, event.title || slug);
+
+            } catch (err) {
+                showToast(`Error: ${err.message}`);
+            } finally {
+                const btn = document.getElementById("analyzeBtn");
+                btn.disabled = false;
+                btn.classList.remove('analyzing');
+            }
+        }
+
+        function renderContext(assetName, spot, rsi, vol, feb1, monthMove, days, windows, useRegime, regimeN) {
+            const rsiClass = rsi < 42 ? "up" : rsi > 58 ? "down" : "";
+            const volPct = (vol * 100).toFixed(1);
+
+            document.getElementById("context").innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">Entry Spot ${assetName}</div>
+                    <div class="stat-value">$${spot.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Momentum RSI</div>
+                    <div class="stat-value ${rsiClass}">${rsi.toFixed(1)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Volatility (14D)</div>
+                    <div class="stat-value">${volPct}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">MTD Growth</div>
+                    <div class="stat-value ${monthMove > 0 ? 'up' : 'down'}">${monthMove.toFixed(1)}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">DTE</div>
+                    <div class="stat-value">${days}d</div>
+                </div>
+                 <div class="stat-card">
+                    <div class="stat-label">Statistical Power</div>
+                    <div class="stat-value">${regimeN}</div>
+                </div>
+            `;
+        }
+
+        function renderResults(bets, title) {
+            const resEl = document.getElementById("results");
+            document.getElementById("resultsTitle").textContent = `${bets.length} Discovered Signals`;
+            document.getElementById("resultsSub").textContent = `ID: ${title.toUpperCase()} // REGIME: ${bets.length > 5 ? 'STOCHASTIC_ALPHA' : 'STABLE_VOL'}`;
+
+            const container = document.getElementById("betCards");
+
+            if (bets.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding: 6rem; border: 1px dashed var(--border); border-radius:12px">
+                        <div style="font-family:var(--font-mono); color:var(--text-dim); font-size:0.6rem; letter-spacing:0.1em">EFFICIENT_MARKET_DETECTED</div>
+                        <p style="font-family:var(--font-sans); font-size:0.75rem; margin-top:0.75rem; color:#555;">No qualified alpha signals found.</p>
+                    </div>`;
+            } else {
+                container.innerHTML = bets.map((b, i) => {
+                    const sideClass = b.side === "NO" ? "side-no" : "side-yes";
+                    const mktDelta = ((b.pWin - (b.side === 'YES' ? b.mktYes : (1 - b.mktYes))) * 100).toFixed(1);
+
+                    return `
+                    <div class="signal-card safe">
+                        <div class="signal-info">
+                            <div class="signal-name">
+                                ${b.type} @ $${b.strike.toLocaleString()}
+                                <span class="tag-safe">${b.tag}</span>
+                            </div>
+                            <div class="signal-desc">${b.warning}</div>
+                        </div>
+
+                        <div class="signal-side ${sideClass}">${b.side}</div>
+
+                        <div class="data-group">
+                            <div class="data-label">Price / Odds</div>
+                            <div class="data-value accent">${(b.cost * 100).toFixed(1)}¢</div>
+                        </div>
+
+                        <div class="data-group">
+                            <div class="data-label">Target Move</div>
+                            <div class="data-value">${b.distToStrike > 0 ? '+' : ''}${b.distToStrike}%</div>
+                        </div>
+
+                        <div class="stability-group">
+                            <div class="data-label">Confidence Index (${b.conf}%)</div>
+                            <div class="stability-bar">
+                                <div class="stability-fill" style="width:${b.conf}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="card-footer">
+                            <div class="footer-item">STAKING: <b>${b.kelly}% </b></div>
+                            <div class="footer-item">SIGMA: <b>${b.sigma.toFixed(2)}σ</b></div>
+                            <div class="footer-item">WIN_PROB: <b>${(b.pWin * 100).toFixed(1)}%</b></div>
+                            <div class="footer-item">EXPECTED_VALUE: <b>$${b.ev1k}</b></div>
+                        </div>
+                    </div>
+                `;
+                }).join("");
+            }
+
+            resEl.style.display = "block";
+            setTimeout(() => { resEl.style.opacity = "1"; }, 100);
+        }
+
+        // Auto-analyze if URL has hash
+        if (window.location.hash) {
+            document.getElementById("urlInput").value = decodeURIComponent(window.location.hash.slice(1));
+            analyze();
+        }
+        // ── MATRIX CURSOR TRACKER ──
+        const cursor = document.getElementById('cursor');
+        document.addEventListener('mousemove', (e) => {
+            requestAnimationFrame(() => {
+                cursor.style.left = (e.clientX - 6) + 'px';
+                cursor.style.top = (e.clientY - 6) + 'px';
+            });
+        });
+
+        document.addEventListener('mousedown', () => cursor.classList.add('clicking'));
+        document.addEventListener('mouseup', () => cursor.classList.remove('clicking'));
+
+    </script>
+</body>
+
+</html>

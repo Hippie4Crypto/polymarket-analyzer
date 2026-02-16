@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test - Polymarket Analyzer</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #0a0a0a;
+            color: #00ff41;
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test {
+            background: #121212;
+            border: 1px solid #333;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 8px;
+        }
+        .success { border-color: #00ff41; }
+        .error { border-color: #ff3e5e; color: #ff3e5e; }
+        .loading { border-color: #ffaa00; color: #ffaa00; }
+        button {
+            background: #00ff41;
+            color: #000;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+        }
+        button:hover { background: #00cc33; }
+        pre {
+            background: #000;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.8rem;
+        }
+        h1 { color: #fff; }
+        h3 { margin-top: 0; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test de APIs - Polymarket Analyzer</h1>
+    <p>Verifica que las Edge Functions funcionen correctamente</p>
+    
+    <button onclick="runAllTests()">▶ Ejecutar Todos los Tests</button>
+    <button onclick="runGammaTest()">Test Gamma API</button>
+    <button onclick="runBinanceTest()">Test Binance API</button>
+    <button onclick="clearResults()">Limpiar</button>
+
+    <div id="results"></div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+
+        function addResult(name, status, data = null, error = null) {
+            const div = document.createElement('div');
+            div.className = `test ${status}`;
+            
+            let content = `<h3>${name}</h3>`;
+            content += `<p>Status: <strong>${status.toUpperCase()}</strong></p>`;
+            
+            if (data) {
+                content += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            
+            if (error) {
+                content += `<p style="color: #ff3e5e;">Error: ${error}</p>`;
+            }
+            
+            div.innerHTML = content;
+            resultsDiv.appendChild(div);
+        }
+
+        async function testEndpoint(name, url) {
+            addResult(name, 'loading', null, 'Testing...');
+            const startTime = Date.now();
+            
+            try {
+                const response = await fetch(url);
+                const duration = Date.now() - startTime;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Update last result
+                resultsDiv.lastChild.remove();
+                addResult(
+                    name, 
+                    'success', 
+                    { 
+                        duration: `${duration}ms`,
+                        status: response.status,
+                        dataPreview: Array.isArray(data) ? 
+                            `Array con ${data.length} elementos` : 
+                            Object.keys(data).slice(0, 5).join(', ')
+                    }
+                );
+                
+                return true;
+            } catch (error) {
+                resultsDiv.lastChild.remove();
+                addResult(name, 'error', null, error.message);
+                return false;
+            }
+        }
+
+        async function runGammaTest() {
+            await testEndpoint(
+                '1. Gamma API - Events',
+                '/api/gamma/events?slug=bitcoin'
+            );
+        }
+
+        async function runBinanceTest() {
+            await testEndpoint(
+                '2. Binance API - BTC Price',
+                '/api/binance/api/v3/ticker/24hr?symbol=BTCUSDT'
+            );
+        }
+
+        async function runAllTests() {
+            clearResults();
+            addResult('Iniciando tests...', 'loading');
+            
+            await runGammaTest();
+            await runBinanceTest();
+            
+            // Test con klines (más pesado)
+            await testEndpoint(
+                '3. Binance API - Klines (1000 candles)',
+                '/api/binance/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=1000'
+            );
+            
+            addResult('✅ Tests completados', 'success', {
+                note: 'Si todos pasaron, las APIs están funcionando correctamente'
+            });
+        }
+
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addResult('Listo para probar', 'success', {
+                    info: 'Click en "Ejecutar Todos los Tests" para verificar las APIs'
+                });
+            }, 100);
+        });
+    </script>
+</body>
+</html>
